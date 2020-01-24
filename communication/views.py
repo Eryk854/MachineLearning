@@ -24,7 +24,7 @@ def send_resource(request):
 
 
 def make_dataset(request):
-    
+
     bigml_auth = "username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;"
     headers = {"content-type": "application/json"}
     #params = {'username': bigml_auth}
