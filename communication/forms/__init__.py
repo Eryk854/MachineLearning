@@ -1,0 +1,1 @@
+from .new_prediction_form import NewPredictionForm

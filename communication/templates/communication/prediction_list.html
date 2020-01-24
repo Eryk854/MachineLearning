@@ -1,0 +1,13 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+Lista predykcji :
+<br/>
+{% for element in predictions %}
+{{element.model}}
+{{element.name}}
+{{element.prediction}}
+{{element.output}}
+{{element.updated}}
+<br/>
+{% endfor %}
+{% endblock%}

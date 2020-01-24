@@ -1,0 +1,14 @@
+from django import forms
+import requests
+
+class NewPredictionForm(forms.Form):
+
+    def __init__(self, *args,**kwargs):
+        input_fields = kwargs.pop('input_data') or None
+        super(NewPredictionForm, self).__init__(*args, **kwargs)
+        self.fields['prediction_name'] = forms.CharField(required=False)
+        for input in input_fields:
+            # our input_fields witch contains type and name of input
+            if input[1] == "double": self.fields[input[0]] = forms.FloatField()
+            #elif input[1] == "string": name = forms.CharField()
+

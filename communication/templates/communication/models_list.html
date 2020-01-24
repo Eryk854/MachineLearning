@@ -1,0 +1,15 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+Lista modelów:
+<br/>
+{% for element in models %}
+<form action= "../make_prediction/{{element.resource}}" method="get">
+    {% csrf_token %}
+    {{element.resource}}
+    {{element.name}}
+    {{element.updated}}
+    <input type="submit" value="Dokonaj predykcji">
+    </form>
+<br/>
+{% endfor %}
+{% endblock%}

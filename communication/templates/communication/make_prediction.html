@@ -1,0 +1,10 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+You do predcition on the model with id {{model_name}}
+<form action="../../make_prediction/model/{{model_name}}" method="post">
+    {% csrf_token %}
+
+    {{form.as_p}}
+    <input type="submit" value="Make prediction">
+</form>
+{% endblock%}
