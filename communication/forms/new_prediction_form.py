@@ -1,5 +1,4 @@
 from django import forms
-import requests
 
 class NewPredictionForm(forms.Form):
 
@@ -10,5 +9,6 @@ class NewPredictionForm(forms.Form):
         for input in input_fields:
             # our input_fields witch contains type and name of input
             if input[1] == "double": self.fields[input[0]] = forms.FloatField()
+            elif input[1].startswith('int'): self.fields[input[0]] = forms.IntegerField()
             #elif input[1] == "string": name = forms.CharField()
 

@@ -1,51 +1,92 @@
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect, reverse
 import requests
 from django.views.generic.list import ListView
 from django.views.generic import TemplateView, View
 from django.views.generic.edit import FormView
-from .forms import NewPredictionForm
+from .forms import NewPredictionForm, NewDatasetForm, NewModelForm
+from django.core.exceptions import ValidationError
 
 #BIGML_USERNAME = 'Eryk
 #BIGML_AUTH=
 
+def index(request):
+    return render(request,"communication/main_page.html")
+
+
 
 # należy spersonalizować zmanę nazwy zbioru  nazwę dowolnego konta różne pliki z dysku i sprawdzanie czy csv
 # można dodać description czyli opis zbioru
-def send_resource(request):
+def add_resource(request):
+    """Make BigML resource using csv file"""
     bigml_auth = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
-    params = {'auth':bigml_auth}
-    files = {'iris.csv':open('communication/iris.csv','rb')}
-    data={'name':'testowe'}
-    r = requests.post("https://bigml.io/andromeda/source?"+bigml_auth, files=files,data=data)
-    print(r.url)
-    return HttpResponse("Ala ma kota")
+    files = {'iris.csv':open('communication/diabetes.csv','rb')}
+    data={'name':'Diabetes'}
+    r = requests.post("https://bigml.io/andromeda/source?", params=bigml_auth, files=files, data=data)
+    return HttpResponse("Add resource to server")
 
 
-def make_dataset(request):
+class MakeDatasetView(FormView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = 'communication/make_dataset.html'
+    form_class = NewDatasetForm
+    success_url = '/models_list/'
 
-    bigml_auth = "username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;"
-    headers = {"content-type": "application/json"}
-    #params = {'username': bigml_auth}
-    params = (bigml_auth)
-    data = {"source": "source/5e2768507811dd06480055c3"}
-    print("https://bigml.io/andromeda/dataset?"+bigml_auth)
-    r = requests.post("https://bigml.io/andromeda/dataset", params=params, json=data,  headers=headers)
-    print(r.url)
-    print(r.json())
-    return HttpResponse("Ala ma kota")
+    def form_valid(self, form):
+        cleaned_data = form.cleaned_data
+        source_id = self.__add_resource(cleaned_data['dataset_name'], cleaned_data['upload_file'])
+        self.__make_dataset(cleaned_data['dataset_name'], source_id)
+        return super().form_valid(form)
+
+    def __add_resource(self, file_name,file):
+        """Make BigML resource using csv file"""
+        print(file_name)
+        print(file)
+        files = {file_name: open('media/dataset/'+str(file), 'rb')}
+        data = {'name': file_name}
+        r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files, data=data)
+        return r.json()['resource']
+
+    def __make_dataset(self,file_name, source_id):
+
+        headers = {"content-type": "application/json"}
+        data = {"name":file_name, "source": source_id}
+        r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
 
 
 def make_model(request):
     bigml_auth = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
     headers = {"content-type": "application/json"}
-    #params = (bigml_auth)
-    data={"name":"model1",'dataset': 'dataset/5e277e8be476845dd90168a6'}
+    data={"name":"Diabetes model", 'dataset': 'dataset/5e2ae89de476845dd901b581'}
     r = requests.post("https://bigml.io/andromeda/model?",json=data, headers=headers, params=bigml_auth )
-    print(r.url)
-    print(r.json())
-    return HttpResponse("Ala ma kotaaaaa")
+    return HttpResponse("We made model uhuuuu")
+
+
+class MakeModelView(FormView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = "communication/make_model.html"
+    form_class = NewModelForm
+    success_url = "/models_list/"
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+        context = {'dataset_id': self.kwargs['dataset_id'],
+                   'form': self.form_class}
+        return context
+
+    def form_valid(self, form):
+        self.__make_model(self.kwargs['dataset_id'], form.cleaned_data['model_name'])
+        return HttpResponseRedirect(self.get_success_url())
+
+    def __make_model(self, dataset_id, model_name):
+
+        headers = {"content-type": "application/json"}
+        data = {"name": model_name, 'dataset': 'dataset/'+dataset_id}
+        r = requests.post("https://bigml.io/andromeda/model?", json=data, headers=headers, params=self.BIGML_AUTH)
+
+
+
 
 
 class MakePredictionClass(View):
@@ -139,3 +180,23 @@ class PredictionListView(TemplateView):
             list.append(element)
         context['predictions'] = list
         return context
+
+
+class DatasetListView(TemplateView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = 'communication/datasets_list.html'
+
+    def get_context_data(self, **kwargs):
+        """Function that creates context of all user datasets and send it to appropriate template """
+        context = super().get_context_data(**kwargs)
+        r = requests.get('https://bigml.io/andromeda/dataset?', params=self.BIGML_AUTH)
+        objects = r.json()['objects']
+        list=[]
+        for obj in objects:
+            # Resource is a id of the dataset. This is needed to create the model on this dataset.
+            element = {'created': obj['created'], 'name': obj['name'], 'resource': obj['resource']}
+            list.append(element)
+        context['datasets'] = list
+        return context
+
+

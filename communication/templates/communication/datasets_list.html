@@ -1,0 +1,15 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+Lista zbiorów danych
+<br/>
+{% for element in datasets %}
+<form action= "../make_model/{{element.resource}}" method="get">
+    {% csrf_token %}
+    {{element.resource}}
+    {{element.name}}
+    {{element.created}}
+    <input type="submit" value="Make model">
+    </form>
+<br/>
+{% endfor %}
+{% endblock%}
