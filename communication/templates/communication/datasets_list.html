@@ -1,9 +1,12 @@
 {% extends 'communication/base.html' %}
 {% block content%}
+{% load filters %}
 Lista zbiorów danych
 <br/>
+
 {% for element in datasets %}
-<form action= "../make_model/{{element.resource}}" method="get">
+{% url 'make model' element.resource|delete as form_url %}
+<form action="{{ form_url }}" method="get">
     {% csrf_token %}
     {{element.resource}}
     {{element.name}}

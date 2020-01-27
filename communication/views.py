@@ -76,17 +76,14 @@ class MakeModelView(FormView):
         return context
 
     def form_valid(self, form):
-        self.__make_model(self.kwargs['dataset_id'], form.cleaned_data['model_name'])
+        self.__make_model(self.kwargs['dataset_id'], form.cleaned_data)
         return HttpResponseRedirect(self.get_success_url())
 
-    def __make_model(self, dataset_id, model_name):
+    def __make_model(self, dataset_id, input_data):
 
         headers = {"content-type": "application/json"}
-        data = {"name": model_name, 'dataset': 'dataset/'+dataset_id}
+        data = {"name": input_data['model_name'], 'description': input_data['description'], 'dataset': 'dataset/'+dataset_id}
         r = requests.post("https://bigml.io/andromeda/model?", json=data, headers=headers, params=self.BIGML_AUTH)
-
-
-
 
 
 class MakePredictionClass(View):
@@ -117,26 +114,26 @@ class MakePredictionClass(View):
             data = form.cleaned_data
             print(data)
             self.__make_prediction(model_name, data)
-        return redirect("make_prediction", model_name=kwargs['model_name'])
+            return redirect("prediction list")
+        return redirect("make prediction", model_name=kwargs['model_name'])
 
     def __make_prediction(self, model, input_data):
         """Function wich make prediction on model and input data. It also register it and api"""
         headers = {"content-type": "application/json"}
         name = input_data['prediction_name']
-        input_data = zip(input_data,range(0,len(input_data)))
+        #input_data = zip(input_data, range(0,len(input_data)))
         input_dataa = {}
-        for data, i in input_data:
-            input_dataa.update({"00000"+str(i): data})
+        i = 0
+        for key in input_data:
+            if key !='prediction_name':
+                input_dataa.update({"00000"+str(i): input_data[key]})
+            i += 1
 
         data = {'model': 'model/'+model,
                 'input_data': input_dataa,
                 'name': name}
-        r = requests.post("https://bigml.io/andromeda/prediction?", json=data, headers=headers, params=self.BIGML_AUTH)
-        print(r.url)
-        response = r.json()
-        print(response)
-        return HttpResponse("Predykcja się udała !")
 
+        r = requests.post("https://bigml.io/andromeda/prediction?", json=data, headers=headers, params=self.BIGML_AUTH)
 
     def __get_models_input_name(self, model_name):
         """This function returns an array of tuple where is name of input data and their datatype"""
@@ -171,15 +168,37 @@ class PredictionListView(TemplateView):
     def get_context_data(self, **kwargs):
         """Function that creates context of all user predictions and send it to appropriate template """
         context = super().get_context_data(**kwargs)
-        r = requests.get('https://bigml.io/andromeda/prediction?', params=self.BIGML_AUTH)
+        # We must present the parameters as text
+        params = (self.BIGML_AUTH, 'order_by=model;', 'order_by=-updated;')
+        text = ''
+        for element in params:
+            text += str(element)
+
+        r = requests.get('https://bigml.io/andromeda/prediction?', params=text)
         objects = r.json()['objects']
         list=[]
         for obj in objects:
             element = {'model':obj['model'], 'name': obj['name'], 'prediction': obj['resource'],
-                       'output': obj['output'], 'updated': obj['updated']}
+                       'output': obj['output'], 'updated': PredictionListView.__change_date_format(obj['updated']),
+                       'predict_values': PredictionListView.__take_prediction_input_values(obj['resource'])}
+            print(element)
             list.append(element)
+
         context['predictions'] = list
         return context
+
+    @staticmethod
+    def __change_date_format(date):
+        """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
+        return date[:10]+' '+date[11:19]
+
+    @staticmethod
+    def __take_prediction_input_values(prediction):
+        r = requests.get('https://bigml.io/andromeda/{}?'.format(prediction), params=PredictionListView.BIGML_AUTH)
+        keys = [r.json()['fields'][input]['name'] for input in r.json()['fields']]
+        input_values = {key: r.json()['input_data'][value] for key, value in zip(keys, r.json()['input_data'])}
+        #print(input_values)
+        return input_values
 
 
 class DatasetListView(TemplateView):

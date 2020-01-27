@@ -2,10 +2,10 @@
 {% block content%}
 Options:
 <ul>
-    <li><a href="datasets_list/">Datasets List</a></li>
-    <li><a href="make_dataset/">Create Dataset</a></li>
-    <li><a href="models_list/">Models List</a></li>
-    <li><a href="prediction_list/">Prediction List</a></li>
+    <li><a href={%url 'datasets list'%} >Datasets List</a></li>
+    <li><a href={%url 'make dataset'%}>Create Dataset</a></li>
+    <li><a href={%url 'models list'%}>Models List</a></li>
+    <li><a href={%url 'prediction list'%}>Prediction List</a></li>
 </ul>
 
 {% endblock%}

@@ -2,7 +2,7 @@
 {% block content%}
 You make model of the dataset {{dataset_id}}
 
-<form action="../../make_model/dataset/{{dataset_id}}" method="post">
+<form action="{%url 'make model' dataset_id %}" method="post">
     {% csrf_token %}
     {{form.as_p}}
     <input type="submit" value="Make model">

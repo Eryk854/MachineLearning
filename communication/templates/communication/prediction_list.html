@@ -1,6 +1,7 @@
 {% extends 'communication/base.html' %}
 {% block content%}
-Lista predykcji :
+{% load filters %}
+Prediction list :
 <br/>
 {% for element in predictions %}
 {{element.model}}
@@ -8,6 +9,11 @@ Lista predykcji :
 {{element.prediction}}
 {{element.output}}
 {{element.updated}}
+<br/>
+Data:
+{% for key in element.predict_values %}
+{{key}}:{{element.predict_values|dict_value:key}}
+{% endfor %}
 <br/>
 {% endfor %}
 {% endblock%}
