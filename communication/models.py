@@ -7,3 +7,11 @@ class Dataset(models.Model):
                                    validators=[FileExtensionValidator(allowed_extensions=['csv'],
                                                                       message="Please choose the csv file")])
     dataset_name = models.CharField(max_length=100)
+
+
+class BatchPrediciton(models.Model):
+    upload_file = models.FileField(upload_to='predictions/',
+                                   validators=[FileExtensionValidator(allowed_extensions=['csv'],
+                                                                      message="Please choose the csv file")])
+    prediction_name = models.CharField(max_length=100, blank=True, default='')
+

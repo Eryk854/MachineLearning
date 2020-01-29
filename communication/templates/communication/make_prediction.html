@@ -2,10 +2,14 @@
 {% block content%}
 You do predcition on the model with id {{model_name}}
 {% url 'make prediction' model_name as form_url%}
-<form action={{form_url}} method="post">
+<form action={{form_url}} method="post" >
     {% csrf_token %}
-
-    {{form.as_p}}
-    <input type="submit" value="Make prediction">
+    {{prediction_form.as_p}}
+    <input type="submit" value="Make prediction" name="create_single_prediction">
+</form>
+<form action={{form_url}} method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{batch_form.as_p}}
+    <input type="submit" value="Make batch prediction" name="create_batch_prediction">
 </form>
 {% endblock%}

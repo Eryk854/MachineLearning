@@ -5,9 +5,11 @@ import requests
 from django.views.generic.list import ListView
 from django.views.generic import TemplateView, View
 from django.views.generic.edit import FormView
-from .forms import NewPredictionForm, NewDatasetForm, NewModelForm
+from django.views.generic.detail import DetailView
+from .forms import NewPredictionForm, NewDatasetForm, NewModelForm, BatchPredictionForm
 from django.core.exceptions import ValidationError
-
+import time
+from django.contrib import messages
 #BIGML_USERNAME = 'Eryk
 #BIGML_AUTH=
 
@@ -55,14 +57,6 @@ class MakeDatasetView(FormView):
         r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
 
 
-def make_model(request):
-    bigml_auth = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
-    headers = {"content-type": "application/json"}
-    data={"name":"Diabetes model", 'dataset': 'dataset/5e2ae89de476845dd901b581'}
-    r = requests.post("https://bigml.io/andromeda/model?",json=data, headers=headers, params=bigml_auth )
-    return HttpResponse("We made model uhuuuu")
-
-
 class MakeModelView(FormView):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
     template_name = "communication/make_model.html"
@@ -89,39 +83,47 @@ class MakeModelView(FormView):
 class MakePredictionClass(View):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
     template_name = "communication/make_prediction.html"
-    form_class = NewPredictionForm
+    form_class = [NewPredictionForm, BatchPredictionForm]
 
     def get(self, request, *args, **kwargs):
         """Get function creates and display prediction form"""
-        input_fields = self.__get_models_input_name(kwargs['model_name'])
-        form = NewPredictionForm(input_data=input_fields)
-        return render(request, self.template_name, context={'form': form,
+        input_fields = self._get_models_input_name(kwargs['model_name'])
+        prediction_form = NewPredictionForm(input_data=input_fields)
+        batch_form = BatchPredictionForm()
+        return render(request, self.template_name, context={'batch_form': batch_form,
+                                                            'prediction_form': prediction_form,
                                                             'model_name': kwargs['model_name']})
 
     def post(self, request, **kwargs):
-        """POST function take and chceck prediction input data  and make prediction """
-        input_fields = self.__get_models_input_name(kwargs['model_name'])
-        form = NewPredictionForm(request.POST, input_data=input_fields)
-        #data={'prediction_name':'','sepal.width':3,'petal.length':2.1 ,'petal.width':1}
-        #form1 = NewPredictionForm(data, input_data=input_fields)
-        #print(form.is_valid())
-        #print(form.errors)
-        #print(form.is_bound)
-        #print(request.POST)
-        #print(type(request.POST['sepal.width']))
-        if form.is_valid():
-            model_name = kwargs['model_name']
-            data = form.cleaned_data
-            print(data)
-            self.__make_prediction(model_name, data)
-            return redirect("prediction list")
+        """POST function needs must handle two forms. First is to make prediction from input data and second
+        from csv file."""
+        if 'create_single_prediction' in request.POST:
+            # User wants to create single prediction
+            input_fields = self._get_models_input_name(kwargs['model_name'])
+            form = NewPredictionForm(request.POST, input_data=input_fields)
+
+            if form.is_valid():
+                model_name = kwargs['model_name']
+                data = form.cleaned_data
+                self.__make_prediction(model_name, data)
+                return redirect("prediction list")
+
+        elif 'create_batch_prediction' in request.POST:
+            # User want to send csv file and make prediction.
+            form = BatchPredictionForm(request.POST, request.FILES)
+            if form.is_valid():
+                model_name = kwargs['model_name']
+                data = form.cleaned_data
+                form.save() # here we save our csv file in media root and in database.
+                self._make_batch_prediction(model_name, data)
+
         return redirect("make prediction", model_name=kwargs['model_name'])
 
+    #                                  functions  for make single prediction
     def __make_prediction(self, model, input_data):
         """Function wich make prediction on model and input data. It also register it and api"""
         headers = {"content-type": "application/json"}
         name = input_data['prediction_name']
-        #input_data = zip(input_data, range(0,len(input_data)))
         input_dataa = {}
         i = 0
         for key in input_data:
@@ -135,12 +137,71 @@ class MakePredictionClass(View):
 
         r = requests.post("https://bigml.io/andromeda/prediction?", json=data, headers=headers, params=self.BIGML_AUTH)
 
-    def __get_models_input_name(self, model_name):
-        """This function returns an array of tuple where is name of input data and their datatype"""
+    def _get_models_input_name(self, model_name):
+        """This function returns an array of tuple where is name of input field and their datatype"""
         r = requests.get('https://bigml.io/andromeda/model/{}?'.format(model_name), params=self.BIGML_AUTH)
         model_fields = r.json()['model']['model_fields']
         input_fields = [(model_fields[field]['name'], model_fields[field]['datatype']) for field in model_fields]
         return input_fields
+    #                                     end single prediction
+    #                                     functions for make batch prediction
+
+    def _make_batch_prediction(self, model_id, data):
+        """We make batch prediction using import csv file, Model_id is model on wich we make prediction and data is a
+        dictionary of our form data. (there is a file and prediction name)"""
+
+        # to make batch prediction we need to make dataset
+        source_id = self._add_resource(data['upload_file'])
+        dataset_id = self._make_dataset(source_id)
+        params = self.BIGML_AUTH
+        headers = {'content-type': 'application/json'}
+        time.sleep(2)
+        data = {'model': "model/"+model_id, 'dataset': dataset_id}
+        r = requests.post("https://bigml.io/andromeda/batchprediction?", params=params, headers=headers, json=data)
+
+    def _add_resource(self, file, data=None):
+        """Make BigML resource using csv file"""
+        files = {'prediction': open('media/predictions/'+str(file), 'rb')}
+        #data = {'name': file_name}
+        r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files)
+        return r.json()['resource']
+
+    def _make_dataset(self, source_id):
+        headers = {"content-type": "application/json"}
+        data = {"source": source_id}
+        r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
+        return r.json()['resource']
+
+    #                                  end batch prediction
+
+
+class PredictionDetailView(TemplateView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = "communication/prediction_detail.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        prediction_id = kwargs['prediction_id']
+        r = requests.get('https://bigml.io/andromeda/prediction/{}?'.format(prediction_id), params=self.BIGML_AUTH)
+        context['name'] = r.json()['name']
+        context['output'] = r.json()['output']
+        context['prediction_id'] = prediction_id
+        context['last_updated'] = PredictionDetailView._change_date_format(r.json()['updated'])
+        context['input_values'] = PredictionDetailView._take_prediction_input_values(prediction_id)
+        return context
+
+    @staticmethod
+    def _take_prediction_input_values(prediction_id):
+        r = requests.get('https://bigml.io/andromeda/prediction/{}?'.format(prediction_id), params=PredictionListView.BIGML_AUTH)
+        keys = [r.json()['fields'][input]['name'] for input in r.json()['fields']]
+        input_values = {key: r.json()['input_data'][value] for key, value in zip(keys, r.json()['input_data'])}
+        return input_values
+
+    @staticmethod
+    def _change_date_format(date):
+        """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
+        return date[:10] + ' ' + date[11:19]
+
 
 
 class ModelsListView(TemplateView):
@@ -176,29 +237,55 @@ class PredictionListView(TemplateView):
 
         r = requests.get('https://bigml.io/andromeda/prediction?', params=text)
         objects = r.json()['objects']
-        list=[]
+        predict_list = []
+        used_models = []
+        models_list = []
         for obj in objects:
             element = {'model':obj['model'], 'name': obj['name'], 'prediction': obj['resource'],
-                       'output': obj['output'], 'updated': PredictionListView.__change_date_format(obj['updated']),
-                       'predict_values': PredictionListView.__take_prediction_input_values(obj['resource'])}
-            print(element)
-            list.append(element)
+                       'output': obj['output'], 'updated': PredictionListView._change_date_format(obj['updated'])}
+                       #'predict_values': PredictionListView.__take_prediction_input_values(obj['resource'])}
 
-        context['predictions'] = list
+            if element['model'] not in used_models:
+                models_list = PredictionListView._take_info_about_model(element['model'], models_list)
+                used_models.append(element['model'])
+
+            predict_list.append(element)
+
+        # We want also to write batch predictions,
+        context['batch_predictions'] = PredictionListView._take_batch_predictions()
+        context['predictions'] = predict_list
+        context['models'] = models_list
         return context
 
     @staticmethod
-    def __change_date_format(date):
+    def _take_batch_predictions():
+        r = requests.get('https://bigml.io/andromeda/batchprediction?', params=PredictionListView.BIGML_AUTH)
+        batch_predictions = []
+        for prediction in r.json()['objects']:
+            batch_predictions.append({'name':prediction['name'],
+                                      'updated': PredictionListView._change_date_format(prediction['updated']),
+                                      'model': prediction['model']})
+        return batch_predictions
+
+
+    @staticmethod
+    def _take_info_about_model(model_id, model_list):
+        r = requests.get('https://bigml.io/andromeda/{}?'.format(model_id), params=PredictionListView.BIGML_AUTH)
+        model_list.append({'model_id': r.json()['resource'], 'description': r.json()['description'], 'name': r.json()['name']})
+        return model_list
+
+
+    @staticmethod
+    def _change_date_format(date):
         """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
         return date[:10]+' '+date[11:19]
 
-    @staticmethod
-    def __take_prediction_input_values(prediction):
-        r = requests.get('https://bigml.io/andromeda/{}?'.format(prediction), params=PredictionListView.BIGML_AUTH)
-        keys = [r.json()['fields'][input]['name'] for input in r.json()['fields']]
-        input_values = {key: r.json()['input_data'][value] for key, value in zip(keys, r.json()['input_data'])}
-        #print(input_values)
-        return input_values
+    # @staticmethod
+    # def __take_prediction_input_values(prediction):
+    #     r = requests.get('https://bigml.io/andromeda/{}?'.format(prediction), params=PredictionListView.BIGML_AUTH)
+    #     keys = [r.json()['fields'][input]['name'] for input in r.json()['fields']]
+    #     input_values = {key: r.json()['input_data'][value] for key, value in zip(keys, r.json()['input_data'])}
+    #     return input_values
 
 
 class DatasetListView(TemplateView):
@@ -218,4 +305,22 @@ class DatasetListView(TemplateView):
         context['datasets'] = list
         return context
 
+
+class DeletePredictionView(View):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+
+    def get(self, request ,*args, **kwargs):
+        r = requests.delete("https://bigml.io/andromeda/prediction/{}".format(self.kwargs['prediction_id']), params=self.BIGML_AUTH)
+        print(r.status_code)
+        if r.status_code == 204:
+            messages.success(self.request, "You deleted the predictions successfully")
+        else:
+            messages.warning(self.request, "Faild to delete the prediction. Try again later")
+        messages.success(self.request, "You deleted the predictions successfully")
+        return redirect('prediction list')
+
+
+def delete_prediction_confirm(request, **kwargs):
+    return render(request, 'communication/delete_confirm.html',
+                  context={'prediction_id': kwargs['prediction_id']})
 

@@ -1,0 +1,10 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+{{name}} {{last_updated}}
+{% for input in input_values%}
+{{input}}: {{input_values|dict_value:input}}
+{% endfor %}
+{{output}}
+<a href="#"> Updated prediction</a>
+<a href="{% url 'delete prediction confirm' prediction_id %}"> Delete prediction</a>
+{% endblock%}

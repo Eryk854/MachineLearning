@@ -2,18 +2,31 @@
 {% block content%}
 {% load filters %}
 Prediction list :
+{% if messages %}
+    {%for message in messages%}
+        {{message}}
+    {% endfor %}
+{% endif %}
 <br/>
-{% for element in predictions %}
-{{element.model}}
-{{element.name}}
-{{element.prediction}}
-{{element.output}}
-{{element.updated}}
-<br/>
-Data:
-{% for key in element.predict_values %}
-{{key}}:{{element.predict_values|dict_value:key}}
-{% endfor %}
-<br/>
+{%for model in models %}
+    {{model.name}} id={{model.model_id}}
+    <span>{{model.description}}</span>
+    {% for element in predictions %}
+        {% if model.model_id == element.model %}
+                <br>
+                {{element.name}} prediction last updated in : {{element.updated}} output : {{element.output}}
+                <a href="{% url 'prediction detail' element.prediction|delete_pre %}"> Prediction detail</a>
+                <a href="{% url 'delete prediction confirm' element.prediction|delete_pre %}"> Delete prediction</a>
+
+        {% endif %}
+    {% endfor %}
+    {% for prediction in batch_predictions%}
+        {% if model.model_id == prediction.model %}
+        <br>
+            {{prediction.name}} {{prediction.updated}}
+        {% endif %}
+    {% endfor %}
+    <br>
+    <br>
 {% endfor %}
 {% endblock%}

@@ -1,0 +1,9 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+{% load filters %}
+You try to delete prediction with id {{prediction_id}}<br>
+<a href="{% url 'delete prediction' prediction_id %}">I'm sure delete it</a><br>
+<a href="{% url 'prediction list' %}">I don't want to delete this prediction</a>
+
+
+{% endblock%}
