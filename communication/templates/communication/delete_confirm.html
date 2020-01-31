@@ -1,9 +1,20 @@
 {% extends 'communication/base.html' %}
 {% block content%}
 {% load filters %}
-You try to delete prediction with id {{prediction_id}}<br>
-<a href="{% url 'delete prediction' prediction_id %}">I'm sure delete it</a><br>
-<a href="{% url 'prediction list' %}">I don't want to delete this prediction</a>
+
+{% if prediction_id %}
+    You try to delete prediction with id {{prediction_id}}<br>
+    <a href="{% url 'delete prediction' prediction_id %}">I'm sure delete it</a><br>
+    <a href="{% url 'prediction list' %}">I don't want to delete this prediction</a>
+{% elif dataset_id %}
+    You try to delete dataset with id {{dataset_id}}<br>
+    <a href="{% url 'delete dataset' dataset_id %}">I'm sure delete it</a><br>
+    <a href="{% url 'datasets list' %}">I don't want to delete this dataset</a>
+{% elif model_id %}
+    You try to delete model with id {{model_id}}<br>
+    <a href="{% url 'delete model' model_id %}">I'm sure delete it</a><br>
+    <a href="{% url 'models list' %}">I don't want to delete this model</a>
+{% endif %}
 
 
 {% endblock%}

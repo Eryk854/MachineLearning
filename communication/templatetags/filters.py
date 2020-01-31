@@ -14,3 +14,12 @@ def delete(dataset):
 @register.filter(name='delete_pre')
 def delete_pre(dataset):
     return dataset[11:]
+
+
+@register.filter(name='delete_batch')
+def delete_batch(dataset):
+    return dataset[16:]
+
+@register.filter(name='delete_model')
+def delete_model(dataset):
+    return dataset[6:]

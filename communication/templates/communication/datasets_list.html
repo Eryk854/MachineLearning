@@ -1,18 +1,35 @@
 {% extends 'communication/base.html' %}
 {% block content%}
 {% load filters %}
-Lista zbiorów danych
-<br/>
 
-{% for element in datasets %}
-{% url 'make model' element.resource|delete as form_url %}
-<form action="{{ form_url }}" method="get">
-    {% csrf_token %}
-    {{element.resource}}
-    {{element.name}}
-    {{element.created}}
-    <input type="submit" value="Make model">
-    </form>
-<br/>
-{% endfor %}
+{% if messages %}
+    {%for message in messages%}
+        {{message}}
+    {% endfor %}
+{% endif %}
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th scope="col">ID</th>
+      <th scope="col">Dataset name</th>
+      <th scope="col">Dataset id</th>
+      <th scope="col">Created</th>
+      <th scope="col"></th>
+      <th scope="col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for element in datasets %}
+    {% url 'make model' element.resource|delete as form_url %}
+    <tr>
+      <th scope="row">{{forloop.counter}}</th>
+      <td>{{element.name}}</td>
+      <td>{{element.resource}}</td>
+      <td>{{element.created}}</td>
+      <td><a href="{{form_url}}">Crate model</a></td>
+      <td><a href="{% url 'delete dataset confirm' element.resource|delete %}">Delete dataset</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endblock%}

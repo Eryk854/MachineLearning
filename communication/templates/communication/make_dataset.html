@@ -1,6 +1,10 @@
 {% extends 'communication/base.html' %}
 {% block content%}
-Make dataset
+{% if messages %}
+    {%for message in messages%}
+        {{message}}
+    {% endfor %}
+{% endif %}
 <form action={%url 'make dataset'%} method="post" enctype="multipart/form-data" >
     {% csrf_token %}
     {{form.as_p}}

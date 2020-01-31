@@ -10,6 +10,8 @@ from .forms import NewPredictionForm, NewDatasetForm, NewModelForm, BatchPredict
 from django.core.exceptions import ValidationError
 import time
 from django.contrib import messages
+from .models import Dataset
+import csv
 #BIGML_USERNAME = 'Eryk
 #BIGML_AUTH=
 
@@ -33,21 +35,40 @@ class MakeDatasetView(FormView):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
     template_name = 'communication/make_dataset.html'
     form_class = NewDatasetForm
-    success_url = '/models_list/'
+    success_url = '/datasets_list/'
 
     def form_valid(self, form):
         cleaned_data = form.cleaned_data
-        source_id = self.__add_resource(cleaned_data['dataset_name'], cleaned_data['upload_file'])
-        self.__make_dataset(cleaned_data['dataset_name'], source_id)
-        return super().form_valid(form)
+        # We save  our file and it's name to our databse. We need to do this to use our resource file
+        new_dataset = Dataset(upload_file=cleaned_data['upload_file'], dataset_name=cleaned_data['dataset_name'])
 
-    def __add_resource(self, file_name,file):
+        #basic chceck if csv file is correct
+        new_dataset.save()
+        dataset_path = new_dataset.upload_file.path
+        if self._basic_chceck_dataset(dataset_path):
+            source_id = self.__add_resource(cleaned_data['dataset_name'], dataset_path)
+            self.__make_dataset(cleaned_data['dataset_name'], source_id)
+            return super().form_valid(form)
+        else:
+            messages.warning(self.request, "Your csv file is wrong. Check number of headings and data")
+            return redirect('make dataset')
+
+
+
+
+    def _basic_chceck_dataset(self, dataset_path):
+        with open(dataset_path, newline='') as f:
+            reader = csv.reader(f)
+            return True if len(next(reader)) == len(next(reader)) else False
+
+
+
+    def __add_resource(self, file_name, file):
         """Make BigML resource using csv file"""
-        print(file_name)
-        print(file)
-        files = {file_name: open('media/dataset/'+str(file), 'rb')}
+        files = {file_name: open(file, 'rb')}
         data = {'name': file_name}
         r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files, data=data)
+        #print(r.json())
         return r.json()['resource']
 
     def __make_dataset(self,file_name, source_id):
@@ -140,6 +161,8 @@ class MakePredictionClass(View):
     def _get_models_input_name(self, model_name):
         """This function returns an array of tuple where is name of input field and their datatype"""
         r = requests.get('https://bigml.io/andromeda/model/{}?'.format(model_name), params=self.BIGML_AUTH)
+        print(r.url)
+        print(r.json())
         model_fields = r.json()['model']['model_fields']
         input_fields = [(model_fields[field]['name'], model_fields[field]['datatype']) for field in model_fields]
         return input_fields
@@ -203,6 +226,22 @@ class PredictionDetailView(TemplateView):
         return date[:10] + ' ' + date[11:19]
 
 
+class BatchPredictionDetailView(TemplateView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = "communication/batch_prediction_detail.html"
+
+    def get_context_data(self, **kwargs):
+        # firt we have to take our batch prediction
+        context = super().get_context_data(**kwargs)
+        r = requests.get('https://bigml.io/andromeda/batchprediction/{}'.format(kwargs['batch_prediction_id']), params=self.BIGML_AUTH)
+        print(r.json())
+
+        context['name'] = r.json()['name']
+        context['input_values'] = self._take_input_values(r.json()['dataset'])
+
+    def _take_input_values(self, dataset):
+        print(dataset)
+
 
 class ModelsListView(TemplateView):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
@@ -264,7 +303,8 @@ class PredictionListView(TemplateView):
         for prediction in r.json()['objects']:
             batch_predictions.append({'name':prediction['name'],
                                       'updated': PredictionListView._change_date_format(prediction['updated']),
-                                      'model': prediction['model']})
+                                      'model': prediction['model'],
+                                      'resource': prediction['resource']})
         return batch_predictions
 
 
@@ -320,7 +360,44 @@ class DeletePredictionView(View):
         return redirect('prediction list')
 
 
+class DeleteDatasetView(View):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+
+    def get(self, request ,*args, **kwargs):
+        r = requests.delete("https://bigml.io/andromeda/dataset/{}".format(self.kwargs['dataset_id']), params=self.BIGML_AUTH)
+        print(r.status_code)
+        if r.status_code == 204:
+            messages.success(self.request, "You deleted the dataset successfully")
+        else:
+            messages.warning(self.request, "Faild to delete the dataset. Try again later")
+        return redirect('datasets list')
+
+
+class DeleteModelView(View):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+
+    def get(self, request, *args, **kwargs):
+        r = requests.delete("https://bigml.io/andromeda/model/{}".format(self.kwargs['model_id']), params=self.BIGML_AUTH)
+        print(r.status_code)
+        print(r.url)
+        if r.status_code == 204:
+            messages.success(self.request, "You deleted the model successfully")
+        else:
+            messages.warning(self.request, "Faild to delete the model. Try again later")
+        return redirect('models list')
+
+
 def delete_prediction_confirm(request, **kwargs):
     return render(request, 'communication/delete_confirm.html',
                   context={'prediction_id': kwargs['prediction_id']})
+
+
+def delete_dataset_confirm(request, **kwargs):
+    return render(request, 'communication/delete_confirm.html',
+                  context={'dataset_id': kwargs['dataset_id']})
+
+
+def delete_model_confirm(request, **kwargs):
+    return render(request, 'communication/delete_confirm.html',
+                  context={'model_id': kwargs['model_id']})
 

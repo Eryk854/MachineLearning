@@ -8,25 +8,58 @@ Prediction list :
     {% endfor %}
 {% endif %}
 <br/>
-{%for model in models %}
-    {{model.name}} id={{model.model_id}}
-    <span>{{model.description}}</span>
-    {% for element in predictions %}
-        {% if model.model_id == element.model %}
-                <br>
-                {{element.name}} prediction last updated in : {{element.updated}} output : {{element.output}}
-                <a href="{% url 'prediction detail' element.prediction|delete_pre %}"> Prediction detail</a>
-                <a href="{% url 'delete prediction confirm' element.prediction|delete_pre %}"> Delete prediction</a>
 
-        {% endif %}
-    {% endfor %}
-    {% for prediction in batch_predictions%}
+{% for model in models %}
+<div>
+<table class="table table-striped">
+  <thead>
+   <tr>
+        <th scope="col">{{forloop.counter}}</th>
+        <th colspan="3"> Model name: {{model.name}}, id: {{model.model_id}} </th>
+        <th>{{model.description}} </th>
+    </tr>
+    <tr>
+        <th scope="col">ID</th>
+      <th scope="col">Name</th>
+      <th scope="col">Last updated </th>
+      <th scope="col">Output</th>
+      <th scope="col">Delete</th>
+      <th scope="col">Detail</th>
+    </tr>
+
+  </thead>
+  <tbody>
+  {% for prediction in predictions %}
+      {% if model.model_id == prediction.model %}
+        <tr>
+            <th scope="row"> {{forloop.counter}}</th>
+            <td>{{prediction.name}}</td>
+            <td>{{prediction.updated}}</td>
+            <td>{{prediction.output}}</td>
+            <td><a href="{% url 'delete prediction confirm' prediction.prediction|delete_pre %}"> Delete prediction</a></td>
+            <td><a href="{% url 'prediction detail' prediction.prediction|delete_pre %}"> Prediction detail</a></td>
+        </tr>
+      {% endif %}
+  {% endfor %}
+  <tr>
+      <td colspan="6"> Batch predictions </td>
+  </tr>
+  {% for prediction in batch_predictions%}
         {% if model.model_id == prediction.model %}
-        <br>
-            {{prediction.name}} {{prediction.updated}}
+    <tr>
+        <th scope="row"> {{forloop.counter}}</th>
+        <td >{{prediction.name}}</td>
+        <td colspan="2">{{prediction.updated}}</td>
+        <td><a href="#"> Delete prediction</a></td>
+        <td><a href="{% url 'batch prediction detail' prediction.resource|delete_batch %}"> Prediction detail</a></td>
+      </tr>
         {% endif %}
     {% endfor %}
-    <br>
-    <br>
+
+
+    </tbody>
+</table>
+</div>
 {% endfor %}
+
 {% endblock%}

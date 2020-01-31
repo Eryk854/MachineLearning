@@ -1,15 +1,32 @@
 {% extends 'communication/base.html' %}
 {% block content%}
-Lista modelów:
-<br/>
-{% for element in models %}
-<form action= "../make_prediction/{{element.resource}}" method="get">
-    {% csrf_token %}
-    {{element.resource}}
-    {{element.name}}
-    {{element.updated}}
-    <input type="submit" value="Dokonaj predykcji">
-    </form>
-<br/>
-{% endfor %}
+{% if messages %}
+    {%for message in messages%}
+        {{message}}
+    {% endfor %}
+{% endif %}
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th scope="col">ID</th>
+      <th scope="col">Model name</th>
+      <th scope="col">Model id</th>
+      <th scope="col">Updated</th>
+      <th scope="col"></th>
+      <th scope="col"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for model in models %}
+    <tr>
+      <th scope="row">{{forloop.counter}}</th>
+      <td>{{model.name}}</td>
+      <td>{{model.resource}}</td>
+      <td>{{model.updated}}</td>
+      <td><a href="{% url 'make prediction' model.resource|delete_model %}">Make a prediction</a></td>
+      <td><a href="{% url 'delete model confirm' model.resource|delete_model %}">Delete model</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% endblock%}
