@@ -49,8 +49,9 @@ Prediction list :
     <tr>
         <th scope="row"> {{forloop.counter}}</th>
         <td >{{prediction.name}}</td>
-        <td colspan="2">{{prediction.updated}}</td>
-        <td><a href="#"> Delete prediction</a></td>
+        <td >{{prediction.updated}}</td>
+        <td >{{prediction.rows}} outputs</td>
+        <td><a href="{% url 'delete batch prediction confirm' prediction.resource|delete_batch %}"> Delete prediction</a></td>
         <td><a href="{% url 'batch prediction detail' prediction.resource|delete_batch %}"> Prediction detail</a></td>
       </tr>
         {% endif %}

@@ -10,25 +10,17 @@ from .forms import NewPredictionForm, NewDatasetForm, NewModelForm, BatchPredict
 from django.core.exceptions import ValidationError
 import time
 from django.contrib import messages
-from .models import Dataset
+from .models import Dataset, BatchPrediciton, BatchPredicitonOutut
 import csv
+from django.conf import settings
+from django.core.files.storage import default_storage
+import json
+import os
 #BIGML_USERNAME = 'Eryk
 #BIGML_AUTH=
 
 def index(request):
     return render(request,"communication/main_page.html")
-
-
-
-# należy spersonalizować zmanę nazwy zbioru  nazwę dowolnego konta różne pliki z dysku i sprawdzanie czy csv
-# można dodać description czyli opis zbioru
-def add_resource(request):
-    """Make BigML resource using csv file"""
-    bigml_auth = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
-    files = {'iris.csv':open('communication/diabetes.csv','rb')}
-    data={'name':'Diabetes'}
-    r = requests.post("https://bigml.io/andromeda/source?", params=bigml_auth, files=files, data=data)
-    return HttpResponse("Add resource to server")
 
 
 class MakeDatasetView(FormView):
@@ -53,22 +45,16 @@ class MakeDatasetView(FormView):
             messages.warning(self.request, "Your csv file is wrong. Check number of headings and data")
             return redirect('make dataset')
 
-
-
-
     def _basic_chceck_dataset(self, dataset_path):
         with open(dataset_path, newline='') as f:
             reader = csv.reader(f)
             return True if len(next(reader)) == len(next(reader)) else False
-
-
 
     def __add_resource(self, file_name, file):
         """Make BigML resource using csv file"""
         files = {file_name: open(file, 'rb')}
         data = {'name': file_name}
         r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files, data=data)
-        #print(r.json())
         return r.json()['resource']
 
     def __make_dataset(self,file_name, source_id):
@@ -161,8 +147,6 @@ class MakePredictionClass(View):
     def _get_models_input_name(self, model_name):
         """This function returns an array of tuple where is name of input field and their datatype"""
         r = requests.get('https://bigml.io/andromeda/model/{}?'.format(model_name), params=self.BIGML_AUTH)
-        print(r.url)
-        print(r.json())
         model_fields = r.json()['model']['model_fields']
         input_fields = [(model_fields[field]['name'], model_fields[field]['datatype']) for field in model_fields]
         return input_fields
@@ -174,22 +158,28 @@ class MakePredictionClass(View):
         dictionary of our form data. (there is a file and prediction name)"""
 
         # to make batch prediction we need to make dataset
-        source_id = self._add_resource(data['upload_file'])
+        new_batch_predciton = BatchPrediciton(upload_file=data['upload_file'], prediction_name=data['prediction_name'])
+        new_batch_predciton.save()
+
+        source_id = self._add_resource(new_batch_predciton.upload_file.path)
+        time.sleep(2)
         dataset_id = self._make_dataset(source_id)
         params = self.BIGML_AUTH
         headers = {'content-type': 'application/json'}
-        time.sleep(2)
-        data = {'model': "model/"+model_id, 'dataset': dataset_id}
+        data = {'model': "model/"+model_id, 'dataset': dataset_id, "output_dataset": True}
+        #data = json.dumps(data)
+        #print(data)
         r = requests.post("https://bigml.io/andromeda/batchprediction?", params=params, headers=headers, json=data)
+        #print(r.json()['resource'])
 
-    def _add_resource(self, file, data=None):
+    def _add_resource(self, file):
         """Make BigML resource using csv file"""
-        files = {'prediction': open('media/predictions/'+str(file), 'rb')}
-        #data = {'name': file_name}
+        files = {'prediction': open(file, 'rb')}
         r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files)
         return r.json()['resource']
 
     def _make_dataset(self, source_id):
+        print(source_id)
         headers = {"content-type": "application/json"}
         data = {"source": source_id}
         r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
@@ -231,16 +221,76 @@ class BatchPredictionDetailView(TemplateView):
     template_name = "communication/batch_prediction_detail.html"
 
     def get_context_data(self, **kwargs):
-        # firt we have to take our batch prediction
+        # first we have to take our batch prediction
         context = super().get_context_data(**kwargs)
         r = requests.get('https://bigml.io/andromeda/batchprediction/{}'.format(kwargs['batch_prediction_id']), params=self.BIGML_AUTH)
-        print(r.json())
 
         context['name'] = r.json()['name']
-        context['input_values'] = self._take_input_values(r.json()['dataset'])
+        context['headers'], context['values'] = self._take_input_values(r.json()['dataset'])
+        outputs = self._take_output_values(r.json()["output_dataset_resource"])
 
-    def _take_input_values(self, dataset):
-        print(dataset)
+        i = 0
+        for output in outputs:
+            context['values'][i].append(output[0])
+            i += 1
+
+        return context
+
+    def _take_output_values(self, outut_dataset):
+        """output_dataset = dataset/id"""
+        r = requests.get('https://bigml.io/andromeda/{}/download?'.format(outut_dataset), params=self.BIGML_AUTH)
+        #print(type(r.content))
+        #print(r.content)
+        media_root = settings.MEDIA_ROOT
+        #print(media_root)
+        dataset_id = outut_dataset[9:]
+        file_path = settings.MEDIA_ROOT+'\\batch_prediction_output\{}.csv'.format(dataset_id)
+        f = open(file_path,'wb')
+        f.write(bytes(r.content))
+        f.close()
+
+        return self._read_output_from_csv(file_path)
+
+
+    def _read_output_from_csv(self, file_path):
+
+        with open(file_path) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            output_values = []
+            next(csv_reader)
+            for row in csv_reader:
+                output_values.append(row)
+
+        os.remove(file_path)
+        return output_values
+
+
+
+    def _take_input_values(self, dataset_id):
+        r = requests.get('https://bigml.io/andromeda/{}?'.format(dataset_id), params=self.BIGML_AUTH)
+        source_id = r.json()['source']
+        r = requests.get('https://bigml.io/andromeda/{}?'.format(source_id), params=self.BIGML_AUTH)
+
+        headers = [r.json()['fields'][field]['name'] for field in r.json()['fields']]
+        #print(headers)
+        values = [[value for value in r.json()['fields_preview'][field]] for field in r.json()['fields_preview']]
+        #print(values)
+        values = [[value[i] for value in values] for i in range(len(values[0]))]
+
+        return headers, values
+
+    @staticmethod
+    def _take_prediction_input_values(prediction_id):
+        r = requests.get('https://bigml.io/andromeda/prediction/{}?'.format(prediction_id),
+                         params=PredictionListView.BIGML_AUTH)
+        keys = [r.json()['fields'][input]['name'] for input in r.json()['fields']]
+        input_values = {key: r.json()['input_data'][value] for key, value in zip(keys, r.json()['input_data'])}
+        return input_values
+
+    @staticmethod
+    def _change_date_format(date):
+        """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
+        return date[:10] + ' ' + date[11:19]
 
 
 class ModelsListView(TemplateView):
@@ -304,7 +354,8 @@ class PredictionListView(TemplateView):
             batch_predictions.append({'name':prediction['name'],
                                       'updated': PredictionListView._change_date_format(prediction['updated']),
                                       'model': prediction['model'],
-                                      'resource': prediction['resource']})
+                                      'resource': prediction['resource'],
+                                      'rows': prediction['rows']})
         return batch_predictions
 
 
@@ -349,14 +400,13 @@ class DatasetListView(TemplateView):
 class DeletePredictionView(View):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
 
-    def get(self, request ,*args, **kwargs):
+    def get(self, request, *args, **kwargs):
         r = requests.delete("https://bigml.io/andromeda/prediction/{}".format(self.kwargs['prediction_id']), params=self.BIGML_AUTH)
         print(r.status_code)
         if r.status_code == 204:
             messages.success(self.request, "You deleted the predictions successfully")
         else:
             messages.warning(self.request, "Faild to delete the prediction. Try again later")
-        messages.success(self.request, "You deleted the predictions successfully")
         return redirect('prediction list')
 
 
@@ -387,9 +437,28 @@ class DeleteModelView(View):
         return redirect('models list')
 
 
+class DeleteBatchPredictionView(View):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+
+    def get(self, request, *args, **kwargs):
+        r = requests.delete("https://bigml.io/andromeda/batchprediction/{}".format(self.kwargs['batch_prediction_id']),
+                            params=self.BIGML_AUTH)
+        print(r.status_code)
+        if r.status_code == 204:
+            messages.success(self.request, "You deleted the batch predictions successfully")
+        else:
+            messages.warning(self.request, "Faild to delete the batch prediction. Try again later")
+        return redirect('prediction list')
+
+
 def delete_prediction_confirm(request, **kwargs):
     return render(request, 'communication/delete_confirm.html',
                   context={'prediction_id': kwargs['prediction_id']})
+
+
+def delete_batch_prediction_confirm(request, **kwargs):
+    return render(request, 'communication/delete_confirm.html',
+                  context={'batch_prediction_id': kwargs['batch_prediction_id']})
 
 
 def delete_dataset_confirm(request, **kwargs):

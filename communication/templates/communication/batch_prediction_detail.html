@@ -1,4 +1,27 @@
 {% extends 'communication/base.html' %}
 {% block content%}
+<table class="table table-striped">
+  <thead>
+    <tr>
+        <th scope="col">ID</th>
+        {% for header in headers %}
+      <th scope="col">{{header}}</th>
+    {% endfor %}
+        <th scope="col">Output</th>
+    </tr>
+  </thead>
+    <tbody>
+    {% for value in values %}
 
+       <tr >
+           <th scope="col"> {{forloop.counter}}</th>
+            {% for element in value%}
+          <th scope="col"> {{element}}</th>
+           {%endfor %}
+       </tr>
+
+    {%endfor %}
+
+    </tbody>
+</table>
 {% endblock%}

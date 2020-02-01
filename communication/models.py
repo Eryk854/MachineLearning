@@ -15,3 +15,12 @@ class BatchPrediciton(models.Model):
                                                                       message="Please choose the csv file")])
     prediction_name = models.CharField(max_length=100, blank=True, default='')
 
+class BatchPredicitonOutut(models.Model):
+    upload_file = models.FileField(upload_to='batch_prediction_output/')
+                                   #validators=[FileExtensionValidator(allowed_extensions=['csv'],
+                                   #                                   message="Please choose the csv file")])
+    # @classmethod
+    # def create(cls, file):
+
+
+

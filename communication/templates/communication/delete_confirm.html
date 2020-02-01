@@ -14,6 +14,11 @@
     You try to delete model with id {{model_id}}<br>
     <a href="{% url 'delete model' model_id %}">I'm sure delete it</a><br>
     <a href="{% url 'models list' %}">I don't want to delete this model</a>
+{% elif batch_prediction_id %}
+    You try to delete batch prediction with id {{batch_prediction_id}}<br>
+    <a href="{% url 'delete batch prediction' batch_prediction_id %}">I'm sure delete it</a><br>
+    <a href="{% url 'prediction list' %}">I don't want to delete this model</a>
+
 {% endif %}
 
 
