@@ -10,6 +10,7 @@ urlpatterns = [
     path("make_model/dataset/<str:dataset_id>", views.MakeModelView.as_view(), name="make model"),
     path("make_prediction/model/<str:model_name>", views.MakePredictionClass.as_view(), name="make prediction"),
     path('prediction_detil/prediction/<str:prediction_id>', views.PredictionDetailView.as_view(), name="prediction detail"),
+    path('model_detail/model/<str:model_id>', views.ModelDetailView.as_view(), name="model detail"),
     path('delete/prediction/confirm/<str:prediction_id>', views.delete_prediction_confirm, name='delete prediction confirm'),
     path('delete/dataset/confirm/<str:dataset_id>', views.delete_dataset_confirm, name='delete dataset confirm'),
     path('delete/model/confirm/<str:model_id>', views.delete_model_confirm, name='delete model confirm'),
@@ -18,6 +19,7 @@ urlpatterns = [
     path('delete/prediction/<str:prediction_id>', views.DeletePredictionView.as_view(), name="delete prediction"),
     path('delete/dataset/<str:dataset_id>', views.DeleteDatasetView.as_view(), name="delete dataset"),
     path('delete/model/<str:model_id>', views.DeleteModelView.as_view(), name="delete model"),
-    path('delete/batch_prediction/<str:batch_prediction_id>', views.DeleteBatchPredictionView.as_view(), name="delete batch prediction")
+    path('delete/batch_prediction/<str:batch_prediction_id>', views.DeleteBatchPredictionView.as_view(), name="delete batch prediction"),
+    path('open/dataset/<str:dataset_id>', views.open_dataset2, name="open dataset")
 
 ]

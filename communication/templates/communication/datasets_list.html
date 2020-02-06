@@ -24,10 +24,11 @@
     <tr>
       <th scope="row">{{forloop.counter}}</th>
       <td>{{element.name}}</td>
-      <td>{{element.resource}}</td>
+      <td>{{element.resource|delete}}</td>
       <td>{{element.created}}</td>
       <td><a href="{{form_url}}">Crate model</a></td>
       <td><a href="{% url 'delete dataset confirm' element.resource|delete %}">Delete dataset</a></td>
+      <td><a href="{% url 'open dataset' element.resource|delete %}">Open dataset</a></td>
     </tr>
   {% endfor %}
   </tbody>

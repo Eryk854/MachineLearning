@@ -34,7 +34,7 @@ class MakeDatasetView(FormView):
         # We save  our file and it's name to our databse. We need to do this to use our resource file
         new_dataset = Dataset(upload_file=cleaned_data['upload_file'], dataset_name=cleaned_data['dataset_name'])
 
-        #basic chceck if csv file is correct
+        # basic chceck if csv file is correct
         new_dataset.save()
         dataset_path = new_dataset.upload_file.path
         if self._basic_chceck_dataset(dataset_path):
@@ -60,7 +60,7 @@ class MakeDatasetView(FormView):
     def __make_dataset(self,file_name, source_id):
 
         headers = {"content-type": "application/json"}
-        data = {"name":file_name, "source": source_id}
+        data = {"name": file_name, "source": source_id}
         r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
 
 
@@ -69,21 +69,40 @@ class MakeModelView(FormView):
     template_name = "communication/make_model.html"
     form_class = NewModelForm
     success_url = "/models_list/"
-    def get_context_data(self, **kwargs):
 
-        context = super().get_context_data(**kwargs)
-        context = {'dataset_id': self.kwargs['dataset_id'],
-                   'form': self.form_class}
-        return context
+    def get(self, request, *args, **kwargs):
+        names = self._take_headers(**kwargs)
+        print(names)
+        form = NewModelForm(variables=names)
+        return render(request, "communication/make_model.html", context={'form': form,
+                                                                         'dataset_id': kwargs['dataset_id']})
 
-    def form_valid(self, form):
-        self.__make_model(self.kwargs['dataset_id'], form.cleaned_data)
-        return HttpResponseRedirect(self.get_success_url())
 
-    def __make_model(self, dataset_id, input_data):
+    def post(self, request, *args, **kwargs):
+        names = self._take_headers(**kwargs)
+        print(names)
+        form = self.form_class(request.POST, variables=names)
+        if form.is_valid():
+            print(form.cleaned_data)
+            self._make_model(self.kwargs['dataset_id'], form.cleaned_data)
+            return HttpResponseRedirect(self.get_success_url())
+        return HttpResponseRedirect('make model')
+
+    def _take_headers(self, **kwargs):
+        r = requests.get("https://bigml.io/andromeda/dataset/{}?".format(self.kwargs['dataset_id']),
+                         params=self.BIGML_AUTH)
+        fields = r.json()['fields']
+        names = [(field, fields[field]['name']) for field in fields]
+        return names
+
+    def _make_model(self, dataset_id, input_data):
 
         headers = {"content-type": "application/json"}
-        data = {"name": input_data['model_name'], 'description': input_data['description'], 'dataset': 'dataset/'+dataset_id}
+        data = {"name": input_data['model_name'],
+                'description': input_data['description'],
+                'dataset': 'dataset/'+dataset_id,
+                'objective_field':input_data['output_name'],
+                'input_fields': input_data['input_fields']}
         r = requests.post("https://bigml.io/andromeda/model?", json=data, headers=headers, params=self.BIGML_AUTH)
 
 
@@ -112,7 +131,7 @@ class MakePredictionClass(View):
             if form.is_valid():
                 model_name = kwargs['model_name']
                 data = form.cleaned_data
-                self.__make_prediction(model_name, data)
+                self.__make_prediction(model_name, data, input_fields)
                 return redirect("prediction list")
 
         elif 'create_batch_prediction' in request.POST:
@@ -121,22 +140,24 @@ class MakePredictionClass(View):
             if form.is_valid():
                 model_name = kwargs['model_name']
                 data = form.cleaned_data
-                form.save() # here we save our csv file in media root and in database.
+                form.save()  # here we save our csv file in media root and in database.
                 self._make_batch_prediction(model_name, data)
 
         return redirect("make prediction", model_name=kwargs['model_name'])
 
     #                                  functions  for make single prediction
-    def __make_prediction(self, model, input_data):
+    def __make_prediction(self, model, input_data, input_fields):
         """Function wich make prediction on model and input data. It also register it and api"""
         headers = {"content-type": "application/json"}
         name = input_data['prediction_name']
         input_dataa = {}
         i = 0
+        #print(input_data)
         for key in input_data:
             if key !='prediction_name':
-                input_dataa.update({"00000"+str(i): input_data[key]})
-            i += 1
+                input_dataa.update({input_fields[i][2]: input_data[key]})
+                i += 1
+        print(input_dataa)
 
         data = {'model': 'model/'+model,
                 'input_data': input_dataa,
@@ -147,8 +168,12 @@ class MakePredictionClass(View):
     def _get_models_input_name(self, model_name):
         """This function returns an array of tuple where is name of input field and their datatype"""
         r = requests.get('https://bigml.io/andromeda/model/{}?'.format(model_name), params=self.BIGML_AUTH)
-        model_fields = r.json()['model']['model_fields']
-        input_fields = [(model_fields[field]['name'], model_fields[field]['datatype']) for field in model_fields]
+        ids = r.json()['input_fields']
+        model_fields = r.json()['model']['fields']
+        input_fields = [[model_fields[field]['name'], model_fields[field]['datatype'], field, ''] for field in ids]
+        for input in input_fields:
+            if input[1] == 'string':
+                input[3] = [(categorie[0], categorie[0]) for categorie in model_fields[input[2]]['summary']['categories']]
         return input_fields
     #                                     end single prediction
     #                                     functions for make batch prediction
@@ -251,9 +276,7 @@ class BatchPredictionDetailView(TemplateView):
 
         return self._read_output_from_csv(file_path)
 
-
     def _read_output_from_csv(self, file_path):
-
         with open(file_path) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             output_values = []
@@ -291,6 +314,36 @@ class BatchPredictionDetailView(TemplateView):
     def _change_date_format(date):
         """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
         return date[:10] + ' ' + date[11:19]
+
+
+class ModelDetailView(TemplateView):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    template_name = 'communication/model_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super(ModelDetailView, self).get_context_data()
+        r = requests.get('https://bigml.io/andromeda/model/{}'.format(kwargs['model_id']), params=self.BIGML_AUTH)
+        fields = r.json()['model']['fields']
+        inputs = r.json()['input_fields']
+        root_childern = r.json()['model']['root']['objective_summary']['categories']
+        # context['fields'] = [(fields[input]['optype'], fields[input]['name']) for input in inputs]
+        # context['rows'] = r.json()['max_rows']
+        # context['description'] = r.json()['description']
+        # context['name'] = r.json()['name']
+        # context['dataset'] = r.json()['dataset']
+        # context['output_field'] = r.json()['objective_field_name']
+        # context['output_summary'] = root_childern
+        context = {'fields': [(fields[input]['optype'], fields[input]['name']) for input in inputs],
+                   'rows': r.json()['max_rows'],
+                   'description': r.json()['description'],
+                   'name': r.json()['name'],
+                   'dataset_id': r.json()['dataset'],
+                   'output_field': r.json()['objective_field_name'],
+                   'output_summary': root_childern}
+
+
+        print(context)
+        return context
 
 
 class ModelsListView(TemplateView):
@@ -391,10 +444,17 @@ class DatasetListView(TemplateView):
         list=[]
         for obj in objects:
             # Resource is a id of the dataset. This is needed to create the model on this dataset.
-            element = {'created': obj['created'], 'name': obj['name'], 'resource': obj['resource']}
+            element = {'created': DatasetListView._change_date_format(obj['created']),
+                       'name': obj['name'],
+                       'resource': obj['resource']}
             list.append(element)
         context['datasets'] = list
         return context
+
+    @staticmethod
+    def _change_date_format(date):
+        """This function change date format. We want to display only format yyyy-mm-dd hh-mm-ss """
+        return date[:10] + ' ' + date[11:19]
 
 
 class DeletePredictionView(View):
@@ -470,3 +530,32 @@ def delete_model_confirm(request, **kwargs):
     return render(request, 'communication/delete_confirm.html',
                   context={'model_id': kwargs['model_id']})
 
+
+def _read_output_from_csv(file_path):
+    with open(file_path) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=',')
+        output_values = []
+        headers = next(csv_reader)
+        for row in csv_reader:
+            output_values.append(row)
+
+    os.remove(file_path)
+    return headers, output_values
+
+from django.template import loader
+def open_dataset2(request, **kwargs):
+    BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
+    r = requests.get("https://bigml.io/andromeda/dataset/{}/download?".format(kwargs['dataset_id']), params=BIGML_AUTH)
+    r = requests.get("https://bigml.io/andromeda/dataset/{}/download?".format(kwargs['dataset_id']), params=BIGML_AUTH)
+    r = requests.get("https://bigml.io/andromeda/dataset/{}/download?".format(kwargs['dataset_id']), params=BIGML_AUTH)
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="dataset.csv"'
+    file_path = settings.MEDIA_ROOT + '\\dataset_details_output\{}.csv'.format(kwargs['dataset_id'])
+    f = open(file_path, 'wb')
+    f.write(bytes(r.content))
+    f.close()
+
+    context = _read_output_from_csv(file_path)
+    print(context)
+    return render(request,"communication/dataset.html", context={"headers": context[0],
+                                                                 "values": context[1]})

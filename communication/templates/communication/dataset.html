@@ -1,0 +1,30 @@
+{% extends 'communication/base.html' %}
+{% block content%}
+{% load filters %}
+
+{% if messages %}
+    {%for message in messages%}
+        {{message}}
+    {% endfor %}
+{% endif %}
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th scope="col">ID</th>
+        {% for header in headers %}
+      <th scope="col">{{header}}</th>
+        {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in values %}
+    <tr>
+        <th scope="row">{{forloop.counter}}</th>
+        {% for value in row %}
+            <td>{{value}}</td>
+        {% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock%}

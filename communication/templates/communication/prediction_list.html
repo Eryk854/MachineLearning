@@ -41,23 +41,19 @@ Prediction list :
         </tr>
       {% endif %}
   {% endfor %}
-  <tr>
-      <td colspan="6"> Batch predictions </td>
-  </tr>
-  {% for prediction in batch_predictions%}
-        {% if model.model_id == prediction.model %}
-    <tr>
-        <th scope="row"> {{forloop.counter}}</th>
-        <td >{{prediction.name}}</td>
-        <td >{{prediction.updated}}</td>
-        <td >{{prediction.rows}} outputs</td>
-        <td><a href="{% url 'delete batch prediction confirm' prediction.resource|delete_batch %}"> Delete prediction</a></td>
-        <td><a href="{% url 'batch prediction detail' prediction.resource|delete_batch %}"> Prediction detail</a></td>
-      </tr>
-        {% endif %}
-    {% endfor %}
 
-
+      {% for prediction in batch_predictions %}
+            {% if model.model_id == prediction.model %}
+        <tr>
+            <th scope="row"> {{forloop.counter}}</th>
+            <td >{{prediction.name}}</td>
+            <td >{{prediction.updated}}</td>
+            <td >{{prediction.rows}} outputs</td>
+            <td><a href="{% url 'delete batch prediction confirm' prediction.resource|delete_batch %}"> Delete prediction</a></td>
+            <td><a href="{% url 'batch prediction detail' prediction.resource|delete_batch %}"> Prediction detail</a></td>
+          </tr>
+            {% endif %}
+        {% endfor %}
     </tbody>
 </table>
 </div>

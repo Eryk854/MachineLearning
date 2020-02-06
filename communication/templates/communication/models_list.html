@@ -21,9 +21,10 @@
     <tr>
       <th scope="row">{{forloop.counter}}</th>
       <td>{{model.name}}</td>
-      <td>{{model.resource}}</td>
+      <td>{{model.resource|delete_model}}</td>
       <td>{{model.updated}}</td>
       <td><a href="{% url 'make prediction' model.resource|delete_model %}">Make a prediction</a></td>
+      <td><a href="{% url 'model detail' model.resource|delete_model %}">See details</a></td>
       <td><a href="{% url 'delete model confirm' model.resource|delete_model %}">Delete model</a></td>
     </tr>
   {% endfor %}
