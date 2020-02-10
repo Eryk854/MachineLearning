@@ -12,7 +12,6 @@
   </thead>
     <tbody>
     {% for value in values %}
-
        <tr >
            <th scope="col"> {{forloop.counter}}</th>
             {% for element in value%}
@@ -24,4 +23,7 @@
 
     </tbody>
 </table>
+
+
+<a href="{% url 'delete batch prediction confirm' batch_prediction_id %} "><button type="button" class="btn btn-danger">Delete batch prediction</button></a>
 {% endblock%}

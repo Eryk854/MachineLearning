@@ -12,7 +12,7 @@ Input values :
     <tr>
         <td scope="col">ID</td>
         <td scope="col">Name of input variable</td>
-        <td scope="col">Typeof input variable</td>
+        <td scope="col">Type of input variable</td>
     </tr>
     </thead>
     <tbody>
@@ -46,6 +46,8 @@ Output summary :
     {% endfor %}
     </tbody>
 </table>
-<a href="{% url 'open dataset' dataset_id|delete %}">Open dataset </a>
+<a href="{% url 'open dataset' dataset_id|delete %}"><button type="button" class="btn btn-success">Open dataset</button></a>
+<a href="{% url 'make prediction' model_id %}"><button type="button" class="btn btn-primary">Create prediction </button></a>
+<a href="{% url 'delete model confirm' model_id%} "><button type="button" class="btn btn-danger">Delete model</button></a>
 
 {% endblock%}

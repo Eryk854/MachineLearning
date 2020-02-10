@@ -2,11 +2,8 @@
 {% block content%}
 {% load filters %}
 
-{% if messages %}
-    {%for message in messages%}
-        {{message}}
-    {% endfor %}
-{% endif %}
+{% include 'communication/display_messages.html' %}
+
 <table class="table table-sm">
   <thead>
     <tr>

@@ -2,11 +2,8 @@
 {% block content%}
 {% load filters %}
 
-{% if messages %}
-    {%for message in messages%}
-        {{message}}
-    {% endfor %}
-{% endif %}
+{% include 'communication/display_messages.html' %}
+
 <table class="table table-sm">
   <thead>
     <tr>
@@ -27,4 +24,7 @@
   {% endfor %}
   </tbody>
 </table>
+
+<a href="{% url 'delete dataset confirm' dataset_id%} "><button type="button" class="btn btn-danger">Delete dataset</button></a>
+<a href="{% url 'make model' dataset_id %}"><button type="button" class="btn btn-primary">Create model on this dataset </button></a>
 {% endblock%}

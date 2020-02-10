@@ -1,5 +1,10 @@
 {% extends 'communication/base.html' %}
+
 {% block content%}
+{% load filters %}
+
+{% include 'communication/display_messages.html' %}
+
 You do predcition on the model with id {{model_name}}
 {% url 'make prediction' model_name as form_url%}
 <form action={{form_url}} method="post" >
@@ -7,8 +12,26 @@ You do predcition on the model with id {{model_name}}
     {{prediction_form.as_p}}
     <input type="submit" value="Make prediction" name="create_single_prediction">
 </form>
+<br>
 <form action={{form_url}} method="post" enctype="multipart/form-data">
     {% csrf_token %}
+    Make sure that your file have {{number_of_input_fields}} columns. Your first row should look like :  {{ first_row }}
+    and also meet the following conditions <br>
+    <ol>
+    {% for input in input_fields %}
+    {% if input.1 == "string" %}
+    <li> column must be categorical value is a column with name <strong>{{input.0}}</strong> and  take one of the following values </li>
+    {% for value in input.3  %}
+        <ul>
+            <li>{{value.0}}</li>
+        </ul>
+    {%endfor %}
+    {% else %}
+    <li> column must be numerical value is a column with name : <strong>{{input.0}}</strong></li>
+    {% endif %}
+    <br>
+    {% endfor %}
+    </ol>
     {{batch_form.as_p}}
     <input type="submit" value="Make batch prediction" name="create_batch_prediction">
 </form>

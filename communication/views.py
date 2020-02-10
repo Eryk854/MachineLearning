@@ -16,11 +16,11 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 import json
 import os
-#BIGML_USERNAME = 'Eryk
-#BIGML_AUTH=
+import pandas as pd
+from io import StringIO
 
 def index(request):
-    return render(request,"communication/main_page.html")
+    return render(request, "communication/main_page.html")
 
 
 class MakeDatasetView(FormView):
@@ -30,34 +30,37 @@ class MakeDatasetView(FormView):
     success_url = '/datasets_list/'
 
     def form_valid(self, form):
+
         cleaned_data = form.cleaned_data
         # We save  our file and it's name to our databse. We need to do this to use our resource file
         new_dataset = Dataset(upload_file=cleaned_data['upload_file'], dataset_name=cleaned_data['dataset_name'])
-
         # basic chceck if csv file is correct
         new_dataset.save()
         dataset_path = new_dataset.upload_file.path
         if self._basic_chceck_dataset(dataset_path):
-            source_id = self.__add_resource(cleaned_data['dataset_name'], dataset_path)
-            self.__make_dataset(cleaned_data['dataset_name'], source_id)
+            # first we make resource and then dataset
+            source_id = self._add_resource(cleaned_data['dataset_name'], dataset_path)
+            self._make_dataset(cleaned_data['dataset_name'], source_id)
             return super().form_valid(form)
         else:
             messages.warning(self.request, "Your csv file is wrong. Check number of headings and data")
             return redirect('make dataset')
 
     def _basic_chceck_dataset(self, dataset_path):
+        """This function check if the number od variables in the header matches the given value. We have to chceck this
+        because it leads to a wrong dataset creation"""
         with open(dataset_path, newline='') as f:
             reader = csv.reader(f)
             return True if len(next(reader)) == len(next(reader)) else False
 
-    def __add_resource(self, file_name, file):
+    def _add_resource(self, file_name, file):
         """Make BigML resource using csv file"""
         files = {file_name: open(file, 'rb')}
         data = {'name': file_name}
         r = requests.post("https://bigml.io/andromeda/source?", params=self.BIGML_AUTH, files=files, data=data)
         return r.json()['resource']
 
-    def __make_dataset(self,file_name, source_id):
+    def _make_dataset(self,file_name, source_id):
 
         headers = {"content-type": "application/json"}
         data = {"name": file_name, "source": source_id}
@@ -76,7 +79,6 @@ class MakeModelView(FormView):
         form = NewModelForm(variables=names)
         return render(request, "communication/make_model.html", context={'form': form,
                                                                          'dataset_id': kwargs['dataset_id']})
-
 
     def post(self, request, *args, **kwargs):
         names = self._take_headers(**kwargs)
@@ -112,13 +114,22 @@ class MakePredictionClass(View):
     form_class = [NewPredictionForm, BatchPredictionForm]
 
     def get(self, request, *args, **kwargs):
-        """Get function creates and display prediction form"""
+        """Get function creates and display two prediction form. One for single prediction and second for batch
+        prediction"""
+
         input_fields = self._get_models_input_name(kwargs['model_name'])
         prediction_form = NewPredictionForm(input_data=input_fields)
         batch_form = BatchPredictionForm()
+        first_row = ''
+        for input in input_fields:
+            first_row += input[0] + ','
+        first_row = first_row[:-1]
         return render(request, self.template_name, context={'batch_form': batch_form,
                                                             'prediction_form': prediction_form,
-                                                            'model_name': kwargs['model_name']})
+                                                            'model_name': kwargs['model_name'],
+                                                            'number_of_input_fields': len(input_fields),
+                                                            'first_row': first_row,
+                                                            'input_fields': input_fields})
 
     def post(self, request, **kwargs):
         """POST function needs must handle two forms. First is to make prediction from input data and second
@@ -140,8 +151,13 @@ class MakePredictionClass(View):
             if form.is_valid():
                 model_name = kwargs['model_name']
                 data = form.cleaned_data
-                form.save()  # here we save our csv file in media root and in database.
-                self._make_batch_prediction(model_name, data)
+                input_fields = self._get_models_input_name(kwargs['model_name'])
+
+                if self._check_csv_file(request.FILES['upload_file'], input_fields):
+                    form.save()  # here we save our csv file in media root and in database.
+                    resource_id = self._make_batch_prediction(model_name, data)
+                    messages.success(self.request, "You made prediction successfully")
+                    return redirect("batch prediction detail", batch_prediction_id=resource_id[16:])
 
         return redirect("make prediction", model_name=kwargs['model_name'])
 
@@ -152,7 +168,6 @@ class MakePredictionClass(View):
         name = input_data['prediction_name']
         input_dataa = {}
         i = 0
-        #print(input_data)
         for key in input_data:
             if key !='prediction_name':
                 input_dataa.update({input_fields[i][2]: input_data[key]})
@@ -166,7 +181,8 @@ class MakePredictionClass(View):
         r = requests.post("https://bigml.io/andromeda/prediction?", json=data, headers=headers, params=self.BIGML_AUTH)
 
     def _get_models_input_name(self, model_name):
-        """This function returns an array of tuple where is name of input field and their datatype"""
+        """This function returns an array of array where is name of input field, their datatype, id of input field
+        and if the input field is categorical make tuple of choices or leaves empty string."""
         r = requests.get('https://bigml.io/andromeda/model/{}?'.format(model_name), params=self.BIGML_AUTH)
         ids = r.json()['input_fields']
         model_fields = r.json()['model']['fields']
@@ -174,9 +190,39 @@ class MakePredictionClass(View):
         for input in input_fields:
             if input[1] == 'string':
                 input[3] = [(categorie[0], categorie[0]) for categorie in model_fields[input[2]]['summary']['categories']]
+        #print(input_fields)
         return input_fields
     #                                     end single prediction
     #                                     functions for make batch prediction
+
+    def _check_csv_file(self, csv_file, input_fields):
+        # first we have to convert byte file to data frame
+        s = str(csv_file.read(), 'utf-8')
+        data = StringIO(s)
+        df = pd.read_csv(data)
+
+        header_list = df.columns.values
+        column_types = df.dtypes
+        i = 0
+        for input_column in input_fields:
+            if input_column[1] == "string":
+                # in this column we have to deal with categorical value
+                unique_df_value = df[header_list[i]].unique()
+                print(unique_df_value)
+                allowed_values = [value[0] for value in input_column[3]]
+                for value in unique_df_value:
+                    if value not in allowed_values:
+                        messages.error(self.request, "It's sth wrong with your {} column. Make sure there are only \
+                        allowed categorical value".format(header_list[i]))
+                        return False
+            else:
+                # We have numerical value
+                if column_types[i] not in ['int8', 'float', 'int32', 'int64']:
+                    messages.error(self.request, "It's sth wrong with your {} column. Make sure that there\
+                     is only numerical values".format(header_list[i]))
+                    return False
+            i += 1
+        return True
 
     def _make_batch_prediction(self, model_id, data):
         """We make batch prediction using import csv file, Model_id is model on wich we make prediction and data is a
@@ -189,13 +235,13 @@ class MakePredictionClass(View):
         source_id = self._add_resource(new_batch_predciton.upload_file.path)
         time.sleep(2)
         dataset_id = self._make_dataset(source_id)
+        time.sleep(2)
         params = self.BIGML_AUTH
         headers = {'content-type': 'application/json'}
         data = {'model': "model/"+model_id, 'dataset': dataset_id, "output_dataset": True}
-        #data = json.dumps(data)
-        #print(data)
         r = requests.post("https://bigml.io/andromeda/batchprediction?", params=params, headers=headers, json=data)
-        #print(r.json()['resource'])
+        time.sleep(2)
+        return r.json()['resource']
 
     def _add_resource(self, file):
         """Make BigML resource using csv file"""
@@ -204,12 +250,10 @@ class MakePredictionClass(View):
         return r.json()['resource']
 
     def _make_dataset(self, source_id):
-        print(source_id)
         headers = {"content-type": "application/json"}
         data = {"source": source_id}
         r = requests.post("https://bigml.io/andromeda/dataset", params=self.BIGML_AUTH, json=data, headers=headers)
         return r.json()['resource']
-
     #                                  end batch prediction
 
 
@@ -252,6 +296,7 @@ class BatchPredictionDetailView(TemplateView):
 
         context['name'] = r.json()['name']
         context['headers'], context['values'] = self._take_input_values(r.json()['dataset'])
+        context['batch_prediction_id'] = kwargs['batch_prediction_id']
         outputs = self._take_output_values(r.json()["output_dataset_resource"])
 
         i = 0
@@ -264,12 +309,12 @@ class BatchPredictionDetailView(TemplateView):
     def _take_output_values(self, outut_dataset):
         """output_dataset = dataset/id"""
         r = requests.get('https://bigml.io/andromeda/{}/download?'.format(outut_dataset), params=self.BIGML_AUTH)
-        #print(type(r.content))
-        #print(r.content)
+        r = requests.get('https://bigml.io/andromeda/{}/download?'.format(outut_dataset), params=self.BIGML_AUTH)
+        r = requests.get('https://bigml.io/andromeda/{}/download?'.format(outut_dataset), params=self.BIGML_AUTH)
         media_root = settings.MEDIA_ROOT
-        #print(media_root)
         dataset_id = outut_dataset[9:]
         file_path = settings.MEDIA_ROOT+'\\batch_prediction_output\{}.csv'.format(dataset_id)
+        print(r.content)
         f = open(file_path,'wb')
         f.write(bytes(r.content))
         f.close()
@@ -295,9 +340,7 @@ class BatchPredictionDetailView(TemplateView):
         r = requests.get('https://bigml.io/andromeda/{}?'.format(source_id), params=self.BIGML_AUTH)
 
         headers = [r.json()['fields'][field]['name'] for field in r.json()['fields']]
-        #print(headers)
         values = [[value for value in r.json()['fields_preview'][field]] for field in r.json()['fields_preview']]
-        #print(values)
         values = [[value[i] for value in values] for i in range(len(values[0]))]
 
         return headers, values
@@ -325,24 +368,17 @@ class ModelDetailView(TemplateView):
         r = requests.get('https://bigml.io/andromeda/model/{}'.format(kwargs['model_id']), params=self.BIGML_AUTH)
         fields = r.json()['model']['fields']
         inputs = r.json()['input_fields']
-        root_childern = r.json()['model']['root']['objective_summary']['categories']
-        # context['fields'] = [(fields[input]['optype'], fields[input]['name']) for input in inputs]
-        # context['rows'] = r.json()['max_rows']
-        # context['description'] = r.json()['description']
-        # context['name'] = r.json()['name']
-        # context['dataset'] = r.json()['dataset']
-        # context['output_field'] = r.json()['objective_field_name']
-        # context['output_summary'] = root_childern
-        context = {'fields': [(fields[input]['optype'], fields[input]['name']) for input in inputs],
+        root_children = r.json()['model']['root']['objective_summary']['categories']
+        context = {'fields': [(fields[input]['optype'], fields[input]['name']) for input in inputs], # fields is a list
+                   #  of tuples (type of input variable, name of variable)
                    'rows': r.json()['max_rows'],
                    'description': r.json()['description'],
                    'name': r.json()['name'],
                    'dataset_id': r.json()['dataset'],
                    'output_field': r.json()['objective_field_name'],
-                   'output_summary': root_childern}
+                   'output_summary': root_children,
+                   'model_id': kwargs['model_id']}
 
-
-        print(context)
         return context
 
 
@@ -473,7 +509,7 @@ class DeletePredictionView(View):
 class DeleteDatasetView(View):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
 
-    def get(self, request ,*args, **kwargs):
+    def get(self, request, *args, **kwargs):
         r = requests.delete("https://bigml.io/andromeda/dataset/{}".format(self.kwargs['dataset_id']), params=self.BIGML_AUTH)
         print(r.status_code)
         if r.status_code == 204:
@@ -542,7 +578,7 @@ def _read_output_from_csv(file_path):
     os.remove(file_path)
     return headers, output_values
 
-from django.template import loader
+
 def open_dataset2(request, **kwargs):
     BIGML_AUTH = 'username=Eryk854;api_key=fb079f5dd95d9f28986d49f983c28a9af3cf09f9;'
     r = requests.get("https://bigml.io/andromeda/dataset/{}/download?".format(kwargs['dataset_id']), params=BIGML_AUTH)
@@ -556,6 +592,6 @@ def open_dataset2(request, **kwargs):
     f.close()
 
     context = _read_output_from_csv(file_path)
-    print(context)
     return render(request,"communication/dataset.html", context={"headers": context[0],
-                                                                 "values": context[1]})
+                                                                 "values": context[1],
+                                                                 "dataset_id": kwargs['dataset_id']})

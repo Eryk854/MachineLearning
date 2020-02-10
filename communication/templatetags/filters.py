@@ -20,6 +20,7 @@ def delete_pre(dataset):
 def delete_batch(dataset):
     return dataset[16:]
 
+
 @register.filter(name='delete_model')
 def delete_model(dataset):
     return dataset[6:]
